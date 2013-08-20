@@ -68,6 +68,7 @@ class BluetoothContext {
   void HandleSetAdapterProperty(const picojson::value& msg);
   void HandleCreateBonding(const picojson::value& msg);
   void HandleDestroyBonding(const picojson::value& msg);
+  void HandleRFCOMMListen(const picojson::value& msg);
 
   void PostMessage(picojson::value v);
   void SetSyncReply(picojson::value v);
@@ -109,6 +110,8 @@ class BluetoothContext {
   G_CALLBACK_2(OnAdapterPropertySet, GObject*, GAsyncResult*);
   G_CALLBACK_1(OnDeviceProxyCreated, GObject*, GAsyncResult*);
   G_CALLBACK_1(OnGotDeviceProperties, GObject*, GAsyncResult*);
+  G_CALLBACK_1(OnServiceProxyCreated, GObject*, GAsyncResult*);
+  G_CALLBACK_1(OnServiceAddRecord, GObject*, GAsyncResult*);
 
   static void OnSignal(GDBusProxy* proxy, gchar* sender_name, gchar* signal,
       GVariant* parameters, gpointer user_data);
@@ -121,6 +124,9 @@ class BluetoothContext {
   GDBusProxy* manager_proxy_;
   std::map<std::string, std::string> callbacks_map_;
   std::map<std::string, std::string> object_path_address_map_;
+
+  GDBusProxy* service_proxy_;
+  int pending_listen_socket_;
 
 #endif
 };
