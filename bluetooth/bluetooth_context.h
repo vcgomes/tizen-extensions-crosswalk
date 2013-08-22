@@ -112,6 +112,7 @@ class BluetoothContext {
   G_CALLBACK_1(OnGotDeviceProperties, GObject*, GAsyncResult*);
   G_CALLBACK_1(OnServiceProxyCreated, GObject*, GAsyncResult*);
   G_CALLBACK_1(OnServiceAddRecord, GObject*, GAsyncResult*);
+  G_CALLBACK_1(OnListenerAccept, GObject*, GAsyncResult*);
 
   static void OnSignal(GDBusProxy* proxy, gchar* sender_name, gchar* signal,
       GVariant* parameters, gpointer user_data);
@@ -127,6 +128,8 @@ class BluetoothContext {
 
   GDBusProxy* service_proxy_;
   int pending_listen_socket_;
+
+  GSocketListener *rfcomm_listener_;
 
 #endif
 };
