@@ -9,11 +9,16 @@
 #include <bluetooth.h>
 #endif
 
+#include <string.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/rfcomm.h>
+#include <bluetooth/sdp.h>
+#include <bluetooth/sdp_lib.h>
+#include <bluetooth/uuid.h>
 
 #define RFCOMM_RECORD "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>	\
 <record>								\
@@ -39,6 +44,43 @@
     <text value=\"%s\" name=\"name\"/>					\
   </attribute>								\
 </record>"
+
+typedef struct OnSDPServiceFoundData_ {
+  std::string address;
+  void* bt_context;
+} OnSDPServiceFoundData;
+
+typedef void (*rfcomm_callback_t) (uint8_t channel, int err, gpointer user_data);
+
+static int bt_string2uuid(uuid_t *uuid, const char *string) {
+  uint32_t data0, data4;
+  uint16_t data1, data2, data3, data5;
+
+  if (sscanf(string, "%08x-%04hx-%04hx-%04hx-%08x%04hx",
+             &data0, &data1, &data2, &data3, &data4, &data5) == 6) {
+    uint8_t val[16];
+
+    data0 = g_htonl(data0);
+    data1 = g_htons(data1);
+    data2 = g_htons(data2);
+    data3 = g_htons(data3);
+    data4 = g_htonl(data4);
+    data5 = g_htons(data5);
+
+    memcpy(&val[0], &data0, 4);
+    memcpy(&val[4], &data1, 2);
+    memcpy(&val[6], &data2, 2);
+    memcpy(&val[8], &data3, 2);
+    memcpy(&val[10], &data4, 4);
+    memcpy(&val[14], &data5, 2);
+
+    sdp_uuid128_create(uuid, val);
+
+    return 0;
+  }
+
+  return -EINVAL;
+}
 
 static uint32_t rfcomm_get_channel(int fd) {
   struct sockaddr_rc laddr;
@@ -91,6 +133,244 @@ static int rfcomm_listen(uint8_t *channel) {
     *channel = rfcomm_get_channel(sk);
 
   return sk;
+}
+
+static int rfcomm_connect(const char *address, uint8_t channel) {
+  int sk = socket(AF_BLUETOOTH, SOCK_STREAM | SOCK_NONBLOCK, BTPROTO_RFCOMM);
+  if (sk < 0)
+    return -1;
+
+  struct sockaddr_rc laddr;
+  // All zeros means BDADDR_ANY and any channel.
+  memset(&laddr, 0, sizeof(laddr));
+
+  laddr.rc_family = AF_BLUETOOTH;
+
+  if (bind(sk, (struct sockaddr *) &laddr, sizeof(laddr)) < 0) {
+    close(sk);
+    return -1;
+  }
+
+  struct sockaddr_rc raddr;
+  memset(&raddr, 0, sizeof(raddr));
+  raddr.rc_family = AF_BLUETOOTH;
+  raddr.rc_channel = channel;
+  str2ba(address, &raddr.rc_bdaddr);
+
+  if (connect(sk, (struct sockaddr *) &raddr, sizeof(raddr)) < 0)
+    if (errno != EINPROGRESS)
+      return -1;
+
+  return sk;
+}
+
+struct search_context {
+  bdaddr_t dst;
+  sdp_session_t *session;
+  rfcomm_callback_t cb;
+  gpointer user_data;
+  uuid_t uuid;
+};
+
+static void search_completed_cb(uint8_t type, uint16_t status,
+                                uint8_t *rsp, size_t size, void *user_data) {
+  struct search_context *ctxt = (struct search_context *) user_data;
+  sdp_list_t *recs = NULL;
+  sdp_record_t *record = NULL;
+  sdp_list_t *protos;
+  int scanned, seqlen = 0, bytesleft = size;
+  uint8_t dataType, channel;
+  int err = 0;
+
+  if (status || type != SDP_SVC_SEARCH_ATTR_RSP) {
+    g_printerr("status %d type %d\n", status, type);
+    err = -EPROTO;
+    goto done;
+  }
+
+  scanned = sdp_extract_seqtype(rsp, bytesleft, &dataType, &seqlen);
+  if (!scanned || !seqlen)
+    goto done;
+
+  rsp += scanned;
+  bytesleft -= scanned;
+  do {
+    sdp_record_t *rec;
+    int recsize;
+
+    recsize = 0;
+    rec = sdp_extract_pdu(rsp, bytesleft, &recsize);
+    if (!rec)
+      break;
+
+    if (!recsize) {
+      sdp_record_free(rec);
+      break;
+    }
+
+    scanned += recsize;
+    rsp += recsize;
+    bytesleft -= recsize;
+
+    recs = sdp_list_append(recs, rec);
+  } while (scanned < (ssize_t) size && bytesleft > 0);
+
+  if (!recs || !recs->data)
+    goto done;
+
+  record = (sdp_record_t *) recs->data;
+
+  if (sdp_get_access_protos(record, &protos) < 0)
+    goto done;
+
+  channel = sdp_get_proto_port(protos, RFCOMM_UUID);
+
+done:
+  if (ctxt->cb)
+    ctxt->cb(channel, err, ctxt->user_data);
+
+  if (recs)
+    sdp_list_free(recs, (sdp_free_func_t) sdp_record_free);
+}
+
+static gboolean search_process_cb(GIOChannel *chan, GIOCondition cond,
+                                  gpointer user_data) {
+  struct search_context *ctxt = (struct search_context *) user_data;
+  int err = 0;
+
+  if (cond & (G_IO_ERR | G_IO_HUP | G_IO_NVAL)) {
+    err = EIO;
+    goto failed;
+  }
+
+  if (sdp_process(ctxt->session) < 0)
+    goto failed;
+
+  return TRUE;
+
+failed:
+  if (err) {
+    sdp_close(ctxt->session);
+    ctxt->session = NULL;
+
+    if (ctxt->cb)
+      ctxt->cb(0, err, ctxt->user_data);
+  }
+
+  return FALSE;
+}
+
+static gboolean connect_watch(GIOChannel *chan, GIOCondition cond,
+                              gpointer user_data)
+{
+  struct search_context *ctxt = (struct search_context *) user_data;
+  sdp_list_t *search, *attrids;
+  uint32_t range = 0x0000ffff;
+  socklen_t len;
+  int sk, err, sk_err = 0;
+
+  sk = g_io_channel_unix_get_fd(chan);
+
+  len = sizeof(sk_err);
+  if (getsockopt(sk, SOL_SOCKET, SO_ERROR, &sk_err, &len) < 0)
+    err = -errno;
+  else
+    err = -sk_err;
+
+  if (err != 0)
+    goto failed;
+
+  if (sdp_set_notify(ctxt->session, search_completed_cb, ctxt) < 0) {
+    err = -EIO;
+    goto failed;
+  }
+
+  search = sdp_list_append(NULL, &ctxt->uuid);
+  attrids = sdp_list_append(NULL, &range);
+  if (sdp_service_search_attr_async(ctxt->session,
+                                    search, SDP_ATTR_REQ_RANGE, attrids) < 0) {
+    sdp_list_free(attrids, NULL);
+    sdp_list_free(search, NULL);
+    err = -EIO;
+    goto failed;
+  }
+
+  sdp_list_free(attrids, NULL);
+  sdp_list_free(search, NULL);
+
+  /* Set callback responsible for update the internal SDP transaction */
+  g_io_add_watch(chan, (GIOCondition) (G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL),
+                 search_process_cb, ctxt);
+  return FALSE;
+
+failed:
+  sdp_close(ctxt->session);
+  ctxt->session = NULL;
+
+  if (ctxt->cb)
+    ctxt->cb(0, err, ctxt->user_data);
+
+  return FALSE;
+}
+
+static struct search_context *create_search_context(const char *address,
+                                                    const char *uuid) {
+  struct search_context *ctxt;
+  sdp_session_t *s;
+  GIOChannel *chan;
+  uint32_t prio = 1;
+  bdaddr_t src, dst;
+  int sk;
+
+  memset(&src, 0, sizeof(src));
+  str2ba(address, &dst);
+
+  s = sdp_connect(&src, &dst, SDP_NON_BLOCKING);
+  if (!s)
+    return NULL;
+
+  ctxt = (struct search_context *) g_try_malloc0(sizeof(struct search_context));
+  if (!ctxt) {
+    sdp_close(s);
+    return NULL;
+  }
+
+  bacpy(&ctxt->dst, &dst);
+  ctxt->session = s;
+  bt_string2uuid(&ctxt->uuid, uuid);
+
+  sk = sdp_get_socket(s);
+  /* Set low priority for the SDP connection not to interfere with
+   * other potential traffic.
+   */
+  if (setsockopt(sk, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio)) < 0)
+    g_printerr("Setting SDP priority failed: %s (%d)\n",
+               strerror(errno), errno);
+
+  chan = g_io_channel_unix_new(sk);
+  g_io_add_watch(chan, (GIOCondition) (G_IO_OUT | G_IO_HUP | G_IO_ERR | G_IO_NVAL),
+                 connect_watch, ctxt);
+
+  g_io_channel_unref(chan);
+
+  return ctxt;
+}
+
+static int bt_search_service(const char *address, const char *uuid,
+                             rfcomm_callback_t cb, void *user_data) {
+  struct search_context *ctxt;
+
+  if (!cb)
+    return -EINVAL;
+
+  ctxt = create_search_context(address, uuid);
+  if (ctxt < 0)
+    return -ENOTCONN;
+
+  ctxt->cb = cb;
+  ctxt->user_data = user_data;
+
+  return 0;
 }
 
 static void getPropertyValue(const char* key, GVariant* value,
@@ -706,6 +986,66 @@ void BluetoothContext::HandleRFCOMMListen(const picojson::value& msg) {
 
   g_dbus_proxy_call(service_proxy_, "AddRecord", g_variant_new("(s)", record),
                     G_DBUS_CALL_FLAGS_NONE, -1, NULL, OnServiceAddRecordThunk, this);
+}
+
+void BluetoothContext::OnSDPServiceFound(uint8_t channel, int err, gpointer user_data)
+{
+  OnSDPServiceFoundData* data = reinterpret_cast<OnSDPServiceFoundData*>(user_data);
+  BluetoothContext *context = reinterpret_cast<BluetoothContext*>(data->bt_context);
+  picojson::value::object o;
+
+  o["cmd"] = picojson::value("");
+  o["reply_id"] = picojson::value(context->callbacks_map_["ConnectRFCOMMByUUID"]);
+
+  context->callbacks_map_.erase("ConnectRFCOMMByUUID");
+
+  if (err < 0) {
+    o["error"] = picojson::value(static_cast<double>(1));
+
+  } else {
+    int sk = rfcomm_connect(data->address.c_str(), channel);
+
+    if (sk < 0) {
+      g_printerr("\nOnSDPServiceFound Connect err %d\n", err);
+      o["error"] = picojson::value(static_cast<double>(1));
+
+    } else {
+      GSocket *socket = g_socket_new_from_fd(sk, NULL);
+      GSource *source = g_socket_create_source(socket, G_IO_IN, NULL);
+
+      context->sockets_.push_back(socket);
+
+      g_source_set_callback(source, (GSourceFunc) BluetoothContext::OnSocketHasData,
+                            context, NULL);
+      g_source_attach(source, NULL);
+      g_source_unref(source);
+
+      o["socket_fd"] = picojson::value(static_cast<double>(sk));
+      o["error"] = picojson::value(static_cast<double>(0));
+    }
+  }
+
+  picojson::value v(o);
+  context->PostMessage(v);
+}
+
+void BluetoothContext::HandleRFCOMMConnectByUUID(const picojson::value& msg) {
+  std::map<std::string, std::string>::iterator it = object_path_address_map_.begin();
+
+  callbacks_map_["ConnectRFCOMMByUUID"] = msg.get("reply_id").to_str();
+
+  OnSDPServiceFoundData* data = new OnSDPServiceFoundData;
+
+  data->address = msg.get("peer").to_str();
+  data->bt_context = this;
+
+  std::string uuid = msg.get("uuid").to_str();
+
+  if (bt_search_service(data->address.c_str(), uuid.c_str(),
+                        BluetoothContext::OnSDPServiceFound, data) < 0) {
+    g_printerr("Could not make a SDP search\n");
+    return;
+  }
 }
 
 void BluetoothContext::OnDeviceProxyCreated(GObject* object, GAsyncResult* res) {

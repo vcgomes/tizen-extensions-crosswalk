@@ -72,6 +72,7 @@ class BluetoothContext {
   picojson::value HandleSocketWriteData(const picojson::value& msg);
   void HandleCloseSocket(const picojson::value& msg);
   void HandleUnregisterServer(const picojson::value& msg);
+  void HandleRFCOMMConnectByUUID(const picojson::value& msg);
 
   void PostMessage(picojson::value v);
   void SetSyncReply(picojson::value v);
@@ -128,6 +129,8 @@ class BluetoothContext {
 
   static gboolean OnSocketHasData(GSocket* client, GIOCondition cond,
                               gpointer user_data);
+
+  static void OnSDPServiceFound(uint8_t channel, int err, gpointer user_data);
 
   GDBusProxy* manager_proxy_;
   std::map<std::string, std::string> callbacks_map_;
