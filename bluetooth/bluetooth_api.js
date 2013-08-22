@@ -713,7 +713,52 @@ function BluetoothDevice(msg) {
   _addConstProperty(this.deviceClass, "services", services_array);
 };
 
-BluetoothDevice.prototype.connectToServiceByUUID = function(uuid, socketSuccessCallback, errorCallback) {};
+BluetoothDevice.prototype.connectToServiceByUUID = function(uuid, socketSuccessCallback, errorCallback) {
+  if (adapter.serviceNotAvailable(errorCallback))
+    return;
+
+  if (typeof uuid !== 'string'
+      || (socketSuccessCallback && typeof socketSuccessCallback !== 'function')
+      || (errorCallback && typeof errorCallback !== 'function')) {
+    if (errorCallback) {
+      var error = new tizen.WebAPIError(tizen.WebAPIException.TYPE_MISMATCH_ERR);
+      errorCallback(error);
+    }
+    throw new tizen.WebAPIException(tizen.WebAPIException.TYPE_MISMATCH_ERR);
+    return;
+  }
+
+  var msg = {
+    'cmd': 'ConnectRFCOMMByUUID',
+    'uuid': uuid,
+    'peer': this.address
+  };
+
+  postMessage(msg, function(result) {
+    if (result.error != 0) {
+      if (errorCallback) {
+	var error;
+	if (result.error == 1)
+          error = new tizen.WebAPIError(tizen.WebAPIException.NOT_FOUND_ERR);
+	else
+          error = new tizen.WebAPIError(tizen.WebAPIException.UNKNOWN_ERR);
+        errorCallback(error);
+      }
+      return;
+    }
+
+    var i = adapter.indexOfDevice(adapter.known_devices, msg.peer);
+    var peer = adapter.known_devices[i];
+
+    var socket = new BluetoothSocket(uuid, peer, result);
+
+    adapter.sockets.push(socket);
+
+    if (socketSuccessCallback) {
+      socketSuccessCallback(socket);
+    }
+  });
+};
 
 BluetoothDevice.prototype._clone = function() {
   var clone = new BluetoothDevice();
