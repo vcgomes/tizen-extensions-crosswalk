@@ -760,8 +760,43 @@ function BluetoothDevice(msg) {
     _addConstProperty(this.deviceClass, 'services', services_array);
 }
 
-BluetoothDevice.prototype.connectToServiceByUUID =
-    function(uuid, socketSuccessCallback, errorCallback) {};
+BluetoothDevice.prototype.connectToServiceByUUID = function(uuid, socketSuccessCallback, errorCallback) {
+  if (!validateArguments("sf?f")) {
+    throw new tizen.WebAPIException(tizen.WebAPIException.TYPE_MISMATCH_ERR);
+  }
+
+  if (adapter.checkServiceAvailability(errorCallback))
+    return;
+
+  var msg = {
+    'cmd': 'ConnectRFCOMMByUUID',
+    'uuid': uuid,
+    'peer': this.address
+  };
+
+  postMessage(msg, function(result) {
+    if (result.error != 0) {
+      if (errorCallback) {
+	var error;
+	if (result.error == 1)
+          error = new tizen.WebAPIError(tizen.WebAPIException.NOT_FOUND_ERR);
+	else
+          error = new tizen.WebAPIError(tizen.WebAPIException.UNKNOWN_ERR);
+        errorCallback(error);
+      }
+      return;
+    }
+
+    var i = adapter.indexOfDevice(adapter.known_devices, msg.peer);
+    var peer = adapter.known_devices[i];
+
+    var socket = new BluetoothSocket(uuid, peer, result);
+
+    adapter.sockets.push(socket);
+
+    socketSuccessCallback(socket);
+  });
+};
 
 BluetoothDevice.prototype._clone = function() {
   var clone = new BluetoothDevice();
