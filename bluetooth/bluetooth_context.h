@@ -70,6 +70,7 @@ class BluetoothContext {
   void HandleDestroyBonding(const picojson::value& msg);
   void HandleRFCOMMListen(const picojson::value& msg);
   picojson::value HandleSocketWriteData(const picojson::value& msg);
+  void HandleCloseSocket(const picojson::value& msg);
 
   void PostMessage(picojson::value v);
   void SetSyncReply(picojson::value v);
