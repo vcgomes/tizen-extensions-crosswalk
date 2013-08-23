@@ -889,4 +889,37 @@ function BluetoothServiceHandler(name, uuid, msg) {
     this.channel = msg.channel;
   }
 };
-BluetoothServiceHandler.prototype.unregister = function(successCallback, errorCallback) {};
+BluetoothServiceHandler.prototype.unregister = function(successCallback, errorCallback) {
+  if (adapter.serviceNotAvailable(errorCallback))
+    return;
+
+  if ((successCallback && typeof successCallback !== 'function')
+      || (errorCallback && typeof errorCallback !== 'function')) {
+    if (errorCallback) {
+      var error = new tizen.WebAPIError(tizen.WebAPIException.TYPE_MISMATCH_ERR);
+      errorCallback(error);
+    }
+  }
+
+  var msg = {
+    'cmd': 'UnregisterServer',
+    'server_fd': this.server_fd,
+    'sdp_handle': this.sdp_handle
+  };
+
+  postMessage(msg, function(result) {
+    if (result.error != 0) {
+      if (errorCallback) {
+        var error = new tizen.WebAPIError(tizen.WebAPIException.UNKNOWN_ERR);
+        errorCallback(error);
+      }
+
+      throw new tizen.WebAPIException(tizen.WebAPIException.TYPE_MISMATCH_ERR);
+      return;
+    }
+
+    if (successCallback) {
+     successCallback();
+    }
+  });
+};

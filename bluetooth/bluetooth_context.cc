@@ -70,6 +70,8 @@ void BluetoothContext::HandleMessage(const char* message) {
     HandleRFCOMMListen(v);
   else if (cmd == "CloseSocket")
     HandleCloseSocket(v);
+  else if (cmd == "UnregisterServer")
+    HandleUnregisterServer(v);
 }
 
 void BluetoothContext::HandleSyncMessage(const char* message) {
