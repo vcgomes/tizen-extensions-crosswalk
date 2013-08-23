@@ -171,6 +171,8 @@ void BluetoothContext::SetSyncReply(picojson::value v) {
   std::string cmd = v.get("cmd").to_str();
   if (cmd == "GetDefaultAdapter")
     api_->SetSyncReply(HandleGetDefaultAdapter(v).serialize().c_str());
+  else if (cmd == "SocketWriteData")
+    api_->SetSyncReply(HandleSocketWriteData(v).serialize().c_str());
 
   FlushPendingMessages();
 }

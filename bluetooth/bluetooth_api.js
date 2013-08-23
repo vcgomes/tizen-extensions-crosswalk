@@ -842,7 +842,16 @@ for (var key in BluetoothSocketState) {
   });
 };
 
-BluetoothSocket.prototype.writeData = function(data) {/*return ulong*/};
+BluetoothSocket.prototype.writeData = function(data) {
+  var msg = {
+    'cmd': 'SocketWriteData',
+    'data': data,
+    'socket_fd': this.socket_fd
+  };
+  var result = JSON.parse(extension.internal.sendSyncMessage(JSON.stringify(msg)));
+
+  return result.size;
+};
 
 BluetoothSocket.prototype.readData = function() {
   return this.data;
