@@ -785,3 +785,25 @@ picojson::value BluetoothContext::HandleSocketWriteData(const picojson::value& m
 
   return picojson::value(o);
 }
+
+void BluetoothContext::HandleCloseSocket(const picojson::value& msg) {
+  int fd = static_cast<int>(msg.get("socket_fd").get<double>());
+  std::vector<GSocket*>::iterator it = sockets_.begin();
+
+  for (; it != sockets_.end(); ++it) {
+    GSocket *socket = *it;
+
+    if (g_socket_get_fd(socket) == fd) {
+      g_socket_close(socket, NULL);
+      break;
+    }
+  }
+
+  picojson::value::object o;
+  o["cmd"] = picojson::value("");
+  o["reply_id"] = msg.get("reply_id");
+  o["error"] = picojson::value(static_cast<double>(0));
+
+  picojson::value v(o);
+  PostMessage(v);
+}
