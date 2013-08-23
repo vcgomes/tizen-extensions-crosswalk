@@ -857,7 +857,17 @@ BluetoothSocket.prototype.readData = function() {
   return this.data;
 };
 
-BluetoothSocket.prototype.close = function() {/*return byte[]*/};
+BluetoothSocket.prototype.close = function() {
+  var msg = {
+    'cmd': 'CloseSocket',
+    'socket_fd': this.socket_fd
+  };
+
+  postMessage(msg, function(result) {
+    if (result.error)
+      console.log("Can't close socket (" + this.socket_fd + ").");
+  });
+};
 
 function BluetoothClass() {};
 BluetoothClass.prototype.hasService = function(service) {
