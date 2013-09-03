@@ -6,6 +6,8 @@
 #define BLUETOOTH_BLUETOOTH_CONTEXT_H_
 
 #include "common/extension_adapter.h"
+#include "common/picojson.h"
+
 #include <map>
 #include <string>
 #include <vector>
@@ -42,7 +44,6 @@ typedef struct OnAdapterPropertySetData_ {
   void* bt_context;
 } OnAdapterPropertySetData;
 
-
 class BluetoothContext {
  public:
   BluetoothContext(ContextAPI* api);
@@ -64,12 +65,12 @@ class BluetoothContext {
 
   void HandleDiscoverDevices(const picojson::value& msg);
   void HandleStopDiscovery(const picojson::value& msg);
-  picojson::value HandleGetDefaultAdapter(const picojson::value& msg);
+  void HandleGetDefaultAdapter(const picojson::value& msg);
   void HandleSetAdapterProperty(const picojson::value& msg);
   void HandleCreateBonding(const picojson::value& msg);
   void HandleDestroyBonding(const picojson::value& msg);
   void HandleRFCOMMListen(const picojson::value& msg);
-  picojson::value HandleSocketWriteData(const picojson::value& msg);
+  void HandleSocketWriteData(const picojson::value& msg);
   void HandleCloseSocket(const picojson::value& msg);
   void HandleUnregisterServer(const picojson::value& msg);
   void HandleRFCOMMConnectByUUID(const picojson::value& msg);
@@ -77,6 +78,8 @@ class BluetoothContext {
   void PostMessage(picojson::value v);
   void SetSyncReply(picojson::value v);
   void FlushPendingMessages();
+
+  void AdapterInfoToValue(picojson::value::object& o);
 
   ContextAPI* api_;
   std::string discover_callback_id_;
@@ -89,6 +92,8 @@ class BluetoothContext {
 
   DeviceMap known_devices_;
   bool is_js_context_initialized_;
+
+  std::string default_adapter_reply_id_;
 
 #if defined(BLUEZ_5)
   G_CALLBACK_1(OnDBusObjectAdded, GDBusObjectManager*, GDBusObject*);
@@ -143,7 +148,6 @@ class BluetoothContext {
   std::vector<GSocket*> servers_;
 
   GSocketListener *rfcomm_listener_;
-
 #endif
 };
 
