@@ -533,6 +533,18 @@ void BluetoothContext::OnGotAdapterProperties(GObject*, GAsyncResult* res) {
     }
   }
 
+  if (!default_adapter_reply_id_.empty()) {
+    picojson::value::object o;
+
+    o["reply_id"] = picojson::value(default_adapter_reply_id_);
+    default_adapter_reply_id_.clear();
+
+    AdapterInfoToValue(o);
+    SetSyncReply(picojson::value(o));
+  }
+
+  is_js_context_initialized_ = true;
+
   g_variant_iter_free(it);
 }
 
@@ -737,6 +749,8 @@ void BluetoothContext::PlatformInitialize() {
 
   is_js_context_initialized_ = false;
 
+  default_adapter_reply_id_ = std::string();
+
   g_dbus_proxy_new_for_bus(G_BUS_TYPE_SYSTEM,
       G_DBUS_PROXY_FLAGS_NONE,
       NULL, /* GDBusInterfaceInfo */
@@ -748,34 +762,18 @@ void BluetoothContext::PlatformInitialize() {
       this);
 }
 
-picojson::value BluetoothContext::HandleGetDefaultAdapter(const picojson::value& msg) {
+void BluetoothContext::HandleGetDefaultAdapter(const picojson::value& msg) {
   picojson::value::object o;
 
-  // If the bluetooth daemon is off, then manager_proxy_ is NULL.
-  // Hence, adapter_proxy_ is also NULL and adapter_info_ won't
-  // have been filled. If the daemon is running but the
-  // adapter is off (i.e.: hci0 down), then adapter_info_ will
-  // have been filled and adapter_info_["Powered"] is false.
+  // We still don't have the information. It was requested during
+  // initialization, so it should arrive eventually.
   if (adapter_info_.empty()) {
-    o["cmd"] = picojson::value("");
-    o["reply_id"] = picojson::value(msg.get("reply_id").to_str());
-    o["error"] = picojson::value(static_cast<double>(1));
-    return picojson::value(o);
+    default_adapter_reply_id_ = msg.get("reply_id").to_str();
+    return;
   }
 
-  o["cmd"] = picojson::value("");
   o["reply_id"] = picojson::value(msg.get("reply_id").to_str());
-
-  o["name"] = picojson::value(adapter_info_["Name"]);
-  o["address"] = picojson::value(adapter_info_["Address"]);
-
-  bool powered = (adapter_info_["Powered"] == "true") ? true : false;
-  o["powered"] = picojson::value(powered);
-
-  bool visible = (adapter_info_["Discoverable"] == "true") ? true : false;
-  o["visible"] = picojson::value(visible);
-
-  o["error"] = picojson::value(static_cast<double>(0));
+  AdapterInfoToValue(o);
 
   // This is the JS API entry point, so we should clean our message queue
   // on the next PostMessage call.
@@ -783,7 +781,7 @@ picojson::value BluetoothContext::HandleGetDefaultAdapter(const picojson::value&
     is_js_context_initialized_ = true;
 
   picojson::value v(o);
-  return v;
+  SetSyncReply(v);
 }
 
 void BluetoothContext::DeviceFound(std::string address, GVariantIter* properties) {
@@ -1104,7 +1102,7 @@ void BluetoothContext::OnGotDeviceProperties(GObject* object, GAsyncResult* res)
   PostMessage(v);
 }
 
-picojson::value BluetoothContext::HandleSocketWriteData(const picojson::value& msg) {
+void BluetoothContext::HandleSocketWriteData(const picojson::value& msg) {
   int fd = static_cast<int>(msg.get("socket_fd").get<double>());
   std::vector<GSocket*>::iterator it = sockets_.begin();
   gssize len = 0;
@@ -1122,8 +1120,7 @@ picojson::value BluetoothContext::HandleSocketWriteData(const picojson::value& m
 
   picojson::value::object o;
   o["size"] = picojson::value(static_cast<double>(len));
-
-  return picojson::value(o);
+  SetSyncReply(picojson::value(o));
 }
 
 void BluetoothContext::HandleCloseSocket(const picojson::value& msg) {
