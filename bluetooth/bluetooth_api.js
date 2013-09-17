@@ -409,6 +409,11 @@ BluetoothAdapter.prototype.setName = function(name, successCallback, errorCallba
 };
 
 BluetoothAdapter.prototype.setPowered = function(state, successCallback, errorCallback) {
+  if (state && adapter.powered && successCallback && typeof successCallback === 'function') {
+    successCallback();
+    return;
+  }
+
   throw new tizen.WebAPIException(tizen.WebAPIException.NOT_SUPPORTED_ERR);
 };
 
