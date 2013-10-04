@@ -20,7 +20,7 @@
       ['extension_host_os == "desktop"', { 'defines': ['GENERIC_DESKTOP'] } ],
       ['extension_build_type== "Debug"', {
         'defines': ['_DEBUG', ],
-        'cflags': [ '-O0', '-g', ],
+        'cflags': [ '-O0', '-g', '-Wall'],
       }],
       ['extension_build_type == "Release"', {
         'defines': ['NDEBUG', ],
