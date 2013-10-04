@@ -599,6 +599,15 @@ BluetoothAdapter.prototype.createBonding = function(address, successCallback, er
   if (adapter.checkServiceAvailability(errorCallback))
     return;
 
+  var index = adapter.indexOfDevice(adapter.known_devices, address);
+  if (index !== -1) {
+    var device = adapter.known_devices[index];
+    if (device.isBonded) {
+      successCallback(device);
+      return;
+    }
+  }
+
   var msg = {
     'cmd': 'CreateBonding',
     'address': address
