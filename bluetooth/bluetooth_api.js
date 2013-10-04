@@ -761,7 +761,7 @@ function BluetoothDevice(msg) {
 }
 
 BluetoothDevice.prototype.connectToServiceByUUID = function(uuid, socketSuccessCallback, errorCallback) {
-  if (!validateArguments("sf?f")) {
+  if (!validateArguments("sf?f", arguments)) {
     throw new tizen.WebAPIException(tizen.WebAPIException.TYPE_MISMATCH_ERR);
   }
 
