@@ -28,9 +28,9 @@ extension.setMessageListener(function(json) {
     handleAdapterUpdated(msg);
   else if (msg.cmd == 'RFCOMMSocketAccept')
     handleRFCOMMSocketAccept(msg);
-  else if (msg.cmd == "SocketHasData")
+  else if (msg.cmd == 'SocketHasData')
     handleSocketHasData(msg);
-  else if (msg.cmd == "SocketClosed")
+  else if (msg.cmd == 'SocketClosed')
     handleSocketClosed(msg);
   else { // Then we are dealing with postMessage return.
     var reply_id = msg.reply_id;
@@ -73,15 +73,17 @@ function validateArguments(signature, args) {
     return false;
 
   // Mandatory arguments.
-  for (var i = 0; i < mandatory_len; i++)
+  for (var i = 0; i < mandatory_len; i++) {
     if (typeof full_args[i] !== signature_to_type[signature[i]])
       return false;
+  }
 
   // Optional args may be null.
-  for (var i = mandatory_len; i < full_args.length && i < signature.length - 1; i++)
-    if (full_args[i] !== null
-        && typeof full_args[i] !== signature_to_type[signature[i + 1]])
+  for (var i = mandatory_len; i < full_args.length && i < signature.length - 1; i++) {
+    if (full_args[i] !== null &&
+        typeof full_args[i] !== signature_to_type[signature[i + 1]])
       return false;
+  }
 
   return true;
 }
@@ -245,7 +247,7 @@ var handleSocketHasData = function(msg) {
       return;
     }
   }
-}
+};
 
 var handleSocketClosed = function(msg) {
   for (var i in adapter.sockets) {
@@ -254,11 +256,11 @@ var handleSocketClosed = function(msg) {
       if (socket.onclose && typeof socket.onmessage === 'function')
         socket.onclose();
 
-      _addConstProperty(socket, "isConnected", false);
+      _addConstProperty(socket, 'isConnected', false);
       return;
     }
   }
-}
+};
 
 var defaultAdapter = new BluetoothAdapter();
 
@@ -848,7 +850,7 @@ BluetoothDevice.prototype._updateProperties = function(device) {
 function BluetoothSocket(uuid, peer, msg) {
   _addConstProperty(this, 'uuid', uuid);
   _addConstProperty(this, 'peer', peer);
-  _addConstProperty(this, 'state', this.BluetoothSocketState.OPEN);
+  _addConstProperty(this, 'state', BluetoothSocketState.OPEN);
   this.onclose = null;
   this.onmessage = null;
   this.data = [];
@@ -895,7 +897,7 @@ BluetoothSocket.prototype.close = function() {
 
   postMessage(msg, function(result) {
     if (result.error)
-      console.log("Can't close socket (" + this.socket_fd + ").");
+      console.log("Can't close socket (" + this.socket_fd + ').');
   });
 };
 
@@ -918,7 +920,8 @@ function BluetoothServiceHandler(name, uuid, msg) {
     this.sdp_handle = msg.sdp_handle;
     this.channel = msg.channel;
   }
-};
+}
+
 BluetoothServiceHandler.prototype.unregister = function(successCallback, errorCallback) {
   if (!validateArguments('?ff', arguments)) {
     throw new tizen.WebAPIError(tizen.WebAPIException.TYPE_MISMATCH_ERR);
