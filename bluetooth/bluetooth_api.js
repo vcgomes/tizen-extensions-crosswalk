@@ -74,7 +74,7 @@ function validateArguments(signature, args) {
 
   // Mandatory arguments.
   for (var i = 0; i < mandatory_len; i++) {
-    if (typeof full_args[i] !== signature_to_type[signature[i]])
+    if (typeof full_args[i] !== signature_to_type[signature[i]] || full_args[i] === null)
       return false;
   }
 
@@ -83,6 +83,32 @@ function validateArguments(signature, args) {
     if (full_args[i] !== null && typeof full_args[i] !== signature_to_type[signature[i + 1]])
       return false;
   }
+
+  return true;
+}
+
+function validateObject(object, signature, attributes) {
+  if (typeof object !== 'object' || object === null)
+    return false;
+
+  for (var i = 0; i < signature.length; i++) {
+    if (object.hasOwnProperty(attributes[i]) &&
+        typeof object[attributes[i]] !== signature_to_type[signature[i]]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function validateAddress(address) {
+  if (typeof address !== 'string')
+    return false;
+
+  var regExp = /([\dA-F][\dA-F]:){5}[\dA-F][\dA-F]/i;
+
+  if (!address.match(regExp))
+    return false;
 
   return true;
 }
@@ -514,6 +540,11 @@ BluetoothAdapter.prototype.discoverDevices = function(discoverySuccessCallback, 
     throw new tizen.WebAPIException(tizen.WebAPIException.TYPE_MISMATCH_ERR);
   }
 
+  if (!validateObject(discoverySuccessCallback,
+                     [ 'onstarted', 'ondevicefound', 'ondevicedisappeared', 'onfinished' ])) {
+       throw new tizen.WebAPIException(tizen.WebAPIException.TYPE_MISMATCH_ERR);
+  }
+
   if (adapter.checkServiceAvailability(errorCallback))
     return;
 
@@ -579,6 +610,10 @@ BluetoothAdapter.prototype.getDevice = function(address, deviceSuccessCallback, 
     throw new tizen.WebAPIException(tizen.WebAPIException.TYPE_MISMATCH_ERR);
   }
 
+  if (!validateAddress(address)) {
+    throw new tizen.WebAPIException(tizen.WebAPIException.TYPE_MISMATCH_ERR);
+  }
+
   if (adapter.checkServiceAvailability(errorCallback))
     return;
 
@@ -595,6 +630,10 @@ BluetoothAdapter.prototype.getDevice = function(address, deviceSuccessCallback, 
 BluetoothAdapter.prototype.createBonding = function(address, successCallback, errorCallback) {
   if (!validateArguments('sf?f', arguments)) {
     throw new tizen.WebAPIError(tizen.WebAPIException.TYPE_MISMATCH_ERR);
+  }
+
+  if (!validateAddress(address)) {
+    throw new tizen.WebAPIException(tizen.WebAPIException.TYPE_MISMATCH_ERR);
   }
 
   if (adapter.checkServiceAvailability(errorCallback))
@@ -635,6 +674,10 @@ BluetoothAdapter.prototype.createBonding = function(address, successCallback, er
 BluetoothAdapter.prototype.destroyBonding = function(address, successCallback, errorCallback) {
   if (!validateArguments('s?ff', arguments)) {
     throw new tizen.WebAPIError(tizen.WebAPIException.TYPE_MISMATCH_ERR);
+  }
+
+  if (!validateAddress(address)) {
+    throw new tizen.WebAPIException(tizen.WebAPIException.TYPE_MISMATCH_ERR);
   }
 
   if (adapter.checkServiceAvailability(errorCallback))
