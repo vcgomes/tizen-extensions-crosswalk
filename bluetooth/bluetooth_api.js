@@ -52,6 +52,7 @@ function Adapter() {
   this.isReady = false;
   this.service_handlers = [];
   this.sockets = [];
+  this.change_listener = null;
 }
 
 
@@ -223,17 +224,31 @@ var handleDeviceUpdated = function(msg) {
 };
 
 var handleAdapterUpdated = function(msg) {
-  if (msg.Name)
+  var listener = adapter.change_listener;
+
+  if (msg.Name) {
     _addConstProperty(defaultAdapter, 'name', msg.Name);
+    if (listener && listener.onnamechanged) {
+      adapter.change_listener.onnamechanged(msg.Name);
+    }
+  }
+
   if (msg.Address)
     _addConstProperty(defaultAdapter, 'address', msg.Address);
   if (msg.Powered) {
-    _addConstProperty(defaultAdapter, 'powered',
-        (msg.Powered == 'true') ? true : false);
+    var powered = (msg.Powered == 'true') ? true : false;
+    if (powered !== defaultAdapter.powered && listener && listener.onstatechanged) {
+      adapter.change_listener.onstatechanged(powered);
+    }
+    _addConstProperty(defaultAdapter, 'powered', powered);
   }
+
   if (msg.Discoverable) {
-    _addConstProperty(defaultAdapter, 'visible',
-        (msg.Discoverable == 'true') ? true : false);
+    var visibility = (msg.Discoverable == 'true') ? true : false;
+    if (visibility !== defaultAdapter.visibility && listener && listener.onvisibilitychanged) {
+      adapter.change_listener.onvisibilitychanged(visibility);
+    }
+    _addConstProperty(defaultAdapter, 'visible', visibility);
   }
 
   defaultAdapter.isReady = true;
@@ -753,6 +768,23 @@ BluetoothAdapter.prototype.registerRFCOMMServiceByUUID =
     }
   });
 };
+
+BluetoothAdapter.prototype.setChangeListener = function(listener) {
+  if (!validateArguments('o', arguments)) {
+    throw new tizen.WebAPIException(tizen.WebAPIException.TYPE_MISMATCH_ERR);
+  }
+
+  if (!validateObject(listener, 'fff',
+                      [ 'onstatechanged', 'onnamechanged', 'onvisibilitychanged' ])) {
+    throw new tizen.WebAPIException(tizen.WebAPIException.TYPE_MISMATCH_ERR);
+  }
+
+  adapter.change_listener = listener;
+};
+
+Bluetooth.prototype.unsetChangeListener = function() {
+  adapter.change_listener = null;
+}
 
 var _deviceClassMask = {
   'MINOR': 0x3F,
