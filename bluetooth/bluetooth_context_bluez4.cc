@@ -710,7 +710,9 @@ void BluetoothContext::HandleSetAdapterProperty(const picojson::value& msg) {
           static_cast<guint32>(msg.get("timeout").get<double>());
       GVariant* disc_timeout = g_variant_new("u", timeout);
       value = g_variant_new("(sv)", "DiscoverableTimeout", disc_timeout);
-      goto done;
+      g_dbus_proxy_call(adapter_proxy_, "SetProperty", value,
+                        G_DBUS_CALL_FLAGS_NONE, 5000, all_pending_,
+                        NULL, NULL);
     }
 
     GVariant* discoverable = g_variant_new("b", msg.get("value").get<bool>());
