@@ -375,6 +375,7 @@ void BluetoothContext::OnAdapterProxyCreated(GObject*, GAsyncResult* res) {
   adapter_proxy_ = g_dbus_proxy_new_for_bus_finish(res, &error);
 
   if (!adapter_proxy_) {
+    is_pending_bluetooth_adapter_ = false;
     g_printerr("\n\n## adapter_proxy_ creation error: %s\n", error->message);
     g_error_free(error);
     return;
@@ -402,8 +403,6 @@ void BluetoothContext::OnServiceProxyCreated(GObject*, GAsyncResult* res) {
 void BluetoothContext::OnManagerCreated(GObject*, GAsyncResult* res) {
   GError* err = 0;
   manager_proxy_ = g_dbus_proxy_new_for_bus_finish(res, &err);
-
-  is_pending_bluetooth_manager_ = false;
 
   if (!manager_proxy_) {
     g_printerr("## Manager Proxy creation error: %s\n", err->message);
@@ -457,7 +456,7 @@ void BluetoothContext::OnBluetoothServiceVanished(GDBusConnection* connection,
     handler->adapter_proxy_ = 0;
   }
 
-  handler->is_pending_bluetooth_manager_ = true;
+  handler->is_pending_bluetooth_adapter_ = false;
 }
 
 void BluetoothContext::AdapterSetPowered(const picojson::value& msg) {
@@ -647,7 +646,7 @@ void BluetoothContext::PlatformInitialize() {
 
   is_js_context_initialized_ = false;
 
-  is_pending_bluetooth_manager_ = true;
+  is_pending_bluetooth_adapter_ = true;
 
   all_pending_ = new_cancellable();
 
@@ -669,7 +668,9 @@ void BluetoothContext::PlatformInitialize() {
 }
 
 void BluetoothContext::HandleGetDefaultAdapter(const picojson::value& msg) {
-  if (is_pending_bluetooth_manager_ && adapter_info_.empty()) {
+  g_printerr("***** pending %d \n", is_pending_bluetooth_adapter_);
+
+  if (!is_pending_bluetooth_adapter_ && adapter_info_.empty()) {
     // Initialize with a dummy value, so the client is able to have an adapter
     // in which to call setPowered(). The correct value will be retrieved when
     // bluetoothd appears, and an AdapterUpdated() message will be sent.

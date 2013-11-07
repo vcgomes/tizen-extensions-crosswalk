@@ -201,7 +201,7 @@ class BluetoothContext {
 
   GSocketListener *rfcomm_listener_;
 
-  bool is_pending_bluetooth_manager_;
+  bool is_pending_bluetooth_adapter_;
 
   guint name_watch_id_;
 #endif
