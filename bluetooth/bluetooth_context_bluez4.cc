@@ -469,6 +469,8 @@ void BluetoothContext::AdapterSetPowered(const picojson::value& msg) {
     error = bt_adapter_enable();
   else
     error = bt_adapter_disable();
+
+  error = error == BT_ERROR_ALREADY_DONE ? EALREADY : error;
 #else
 
   OnAdapterPropertySetData* property_set_callback_data_ =
@@ -491,6 +493,8 @@ void BluetoothContext::AdapterSetPowered(const picojson::value& msg) {
 
     o["cmd"] = picojson::value("");
     o["reply_id"] = msg.get("reply_id");
+
+    error = error == EALREADY ? 0 : error;
     o["error"] = picojson::value(static_cast<double>(error));
 
     PostMessage(picojson::value(o));
